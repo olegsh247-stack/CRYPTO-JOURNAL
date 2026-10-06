@@ -1,0 +1,105 @@
+name: Build v8 Break even
+on:
+  push:
+    paths:
+      - "CryptoJournal_Input_Prototype_v7.xlsx"
+      - ".github/workflows/build-v8.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare workbook
+        run: |
+          python -m pip install openpyxl
+          python - <<'PY'
+          from openpyxl import load_workbook
+          from copy import copy
+          from pathlib import Path
+
+          src = Path("CryptoJournal_Input_Prototype_v7.xlsx")
+          out = Path("CryptoJournal_Input_Prototype_v8.xlsx")
+          wb = load_workbook(src)
+
+          trade = wb["Торговля"]
+          total = wb["ИТОГО Торговля"]
+
+          def find_header(ws, text):
+              hits = []
+              for row in ws.iter_rows():
+                  for c in row:
+                      if str(c.value).strip().lower() == text.lower():
+                          hits.append(c)
+              return hits
+
+          total_hits = find_header(total, "Break even")
+          if not total_hits:
+              raise RuntimeError("Не найден заголовок Break even на листе ИТОГО Торговля")
+
+          src_cell = total_hits[0]
+
+          # Find a sensible insertion point in Торговля:
+          # if a column with Break even already exists, reuse it; otherwise
+          # place it immediately after the last populated header column.
+          trade_hits = find_header(trade, "Break even")
+          if trade_hits:
+              target_col = trade_hits[0].column
+          else:
+              header_row = src_cell.row
+              # Prefer the header row containing the main table; otherwise row 1.
+              populated = [c.column for c in trade[header_row] if c.value is not None]
+              if not populated:
+                  populated = [c.column for c in trade[1] if c.value is not None]
+                  header_row = 1
+              target_col = (max(populated) + 1) if populated else trade.max_column + 1
+              trade.insert_cols(target_col, 1)
+
+          # Copy column width from the reference Break even column.
+          src_letter = src_cell.column_letter
+          dst_letter = trade.cell(1, target_col).column_letter
+          if src_letter in total.column_dimensions:
+              trade.column_dimensions[dst_letter].width = total.column_dimensions[src_letter].width
+
+          # Copy style/number format/alignment/fill/border/font/protection
+          # from the reference Break even column, row-by-row where possible.
+          max_row = max(trade.max_row, total.max_row)
+          for r in range(1, max_row + 1):
+              s = total.cell(r, src_cell.column)
+              d = trade.cell(r, target_col)
+              if s.has_style:
+                  d._style = copy(s._style)
+              if s.number_format:
+                  d.number_format = s.number_format
+              if s.alignment:
+                  d.alignment = copy(s.alignment)
+              if s.protection:
+                  d.protection = copy(s.protection)
+
+          # Header must be exactly one Break even column.
+          # Use the reference header's text/style.
+          th = trade.cell(src_cell.row, target_col)
+          th.value = "Break even"
+
+          # Preserve formulas/values from an existing Trade column only if it
+          # already existed; for a new column leave data cells empty, as this
+          # request is specifically for the single visual/structural column.
+          for r in range(1, trade.max_row + 1):
+              if r != src_cell.row and trade.cell(r, target_col).value is not None:
+                  trade.cell(r, target_col).value = None
+
+          # Save as a separate prototype version.
+          wb.save(out)
+          print(f"Created {out}")
+          PY
+
+      - name: Commit v8
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add CryptoJournal_Input_Prototype_v8.xlsx
+          git commit -m "Add single Break even column to Торговля prototype" || exit 0
+          git push
