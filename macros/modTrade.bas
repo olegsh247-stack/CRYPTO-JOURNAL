@@ -141,6 +141,7 @@ Private Sub DoWrite(ByVal sec As String)
     pair = UCase(Txt(wsIn.Range("E5").Value2))
     If Len(pair) = 0 Then Fail "Не заполнены Актив 1 и Актив 2 (Пара).": Exit Sub
     If UCase(Txt(wsIn.Range("C5").Value2)) = UCase(Txt(wsIn.Range("D5").Value2)) Then Fail "Актив 1 и Актив 2 не должны совпадать.": Exit Sub
+    If InStr(Txt(wsIn.Range("C5").Value2) & Txt(wsIn.Range("D5").Value2), "/") > 0 Then Fail "В полях Актив вводится один актив без «/». Пара собирается автоматически.": Exit Sub
     proto = Txt(wsIn.Range("F5").Value2)
     act = Txt(wsIn.Range(cAct).Value2)
     If StrComp(act, "Buy", vbTextCompare) = 0 Then
@@ -325,6 +326,7 @@ Private Sub DoWritePool()
     pair = UCase(Txt(wsIn.Range("E5").Value2))
     If Len(pair) = 0 Then Fail "Не заполнены Актив 1 и Актив 2 (Пара).": Exit Sub
     If UCase(Txt(wsIn.Range("C5").Value2)) = UCase(Txt(wsIn.Range("D5").Value2)) Then Fail "Актив 1 и Актив 2 не должны совпадать.": Exit Sub
+    If InStr(Txt(wsIn.Range("C5").Value2) & Txt(wsIn.Range("D5").Value2), "/") > 0 Then Fail "В полях Актив вводится один актив без «/». Пара собирается автоматически.": Exit Sub
     proto = Txt(wsIn.Range("F5").Value2)
     act = Txt(wsIn.Range("G8").Value2)
     If StrComp(act, "Добавить", vbTextCompare) <> 0 And StrComp(act, "Частично", vbTextCompare) <> 0 _
@@ -422,46 +424,6 @@ End Function
 Private Const COIN_COL As Long = 9      ' Справочники, колонка I «Монеты»
 Private Const COIN_FIRST As Long = 5
 Private Const COIN_LAST As Long = 304
-
-' Подсказка при вводе Актива: вызывается из листа «Ввод» (Worksheet_Change).
-Public Sub CompleteCoin(ByVal c As Range)
-    Dim t As String, v As String, ws As Worksheet, r As Long
-    Dim m(1 To 40) As String, n As Long, i As Long, msg As String, ans As String
-    t = UCase(Trim(Txt(c.Value2)))
-    If Len(t) = 0 Then Exit Sub
-    If InStr(t, "/") > 0 Then
-        MsgBox "В поле Актив вводится один актив без «/». Пара собирается автоматически.", vbExclamation, "Монета"
-        c.ClearContents
-        Exit Sub
-    End If
-    Set ws = ThisWorkbook.Worksheets(SH_R)
-    For r = COIN_FIRST To COIN_LAST
-        v = UCase(Txt(ws.Cells(r, COIN_COL).Value2))
-        If Len(v) > 0 Then
-            If v = t Then c.Value2 = t: Exit Sub
-            If Left(v, Len(t)) = t And n < 40 Then n = n + 1: m(n) = v
-        End If
-    Next r
-    c.Value2 = t
-    If n = 0 Then Exit Sub
-    If n = 1 Then
-        If MsgBox("Подставить " & m(1) & " вместо " & t & "?" & vbCrLf & "Нет — " & t & " будет записан как новая монета.", _
-                  vbYesNo + vbQuestion, "Монета") = vbYes Then c.Value2 = m(1)
-    Else
-        msg = "Монеты, начинающиеся с " & t & ":" & vbCrLf
-        For i = 1 To n
-            msg = msg & i & " — " & m(i) & vbCrLf
-        Next i
-        msg = msg & vbCrLf & "Введите номер. Отмена — оставить " & t & " как новую монету."
-        ans = Trim(InputBox(msg, "Монета"))
-        If Len(ans) > 0 Then
-            If IsNumeric(ans) Then
-                i = CLng(ans)
-                If i >= 1 And i <= n Then c.Value2 = m(i)
-            End If
-        End If
-    End If
-End Sub
 
 Private Function RegisterCoin(ByVal nm As String) As Boolean
     Dim ws As Worksheet, r As Long, v As String, arr(1 To 400) As String

@@ -13,7 +13,7 @@ for i,ws in enumerate(wb.worksheets,1):
 inp_idx=wb.sheetnames.index("Ввод")+1
 wb.save(TMP)
 code=open('/home/claude/crypto-journal/macros/modTrade.bas',encoding='utf-8').read()
-vba=v.build_vba_project(names,code,{'Sheet%d'%inp_idx:open('/home/claude/crypto-journal/macros/modInputSheet.bas',encoding='utf-8').read()})
+vba=v.build_vba_project(names,code)
 zin=zipfile.ZipFile(TMP)
 files={n:zin.read(n) for n in zin.namelist()}
 ct=files['[Content_Types].xml'].decode()
