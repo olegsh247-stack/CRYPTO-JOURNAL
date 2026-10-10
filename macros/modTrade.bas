@@ -1,7 +1,7 @@
 Option Explicit
 ' ===== CryptoJournal. Макрос ЗАПИСАТЬ для раздела «Торговля» (шаг 1) =====
 ' Лист «Ввод»: Дата B5, Актив 1 C5, Актив 2 D5, Пара E5, Протокол F5,
-' Торговля: Действие C8, Кол-во C9, Курс C10, ID позиции C12, Кол-во закрыть C13,
+' Торговля: Действие C8, Кол-во C9, Курс C10, ID позиции C12, Закрыть C13 (Частично/Полностью),
 ' Комиссия E17. Счётчик ID: Справочники!G5.
 
 Private Const SH_IN As String = "Ввод"
@@ -81,7 +81,7 @@ Public Sub WriteTrade()
     Dim wsIn As Worksheet, wsT As Worksheet, wsC As Worksheet, wsR As Worksheet
     Dim d As Variant, pair As String, proto As String, act As String
     Dim qty As Double, rate As Double, fee As Double, eff As Double
-    Dim idRaw As Variant, id As String, closeQ As Double
+    Dim idRaw As Variant, id As String, closeQ As Double, closeMode As String
     Dim pr As Long, cr As Long, nr As Long
     Dim posQty As Double, posRate As Double, posBuy As Boolean, actBuy As Boolean
     Dim newQty As Double, newRate As Double, remQ As Double
@@ -134,6 +134,7 @@ Public Sub WriteTrade()
 
     ' ===== РЕЖИМ: ID пусто — новая позиция =====
     If Len(id) = 0 Then
+        If Len(Txt(wsIn.Range("C13").Value2)) > 0 Then Fail "Поле «Закрыть» нужно только при закрытии: укажите ID позиции или очистите поле.": Exit Sub
         If Len(proto) = 0 Then Fail "Не выбран Протокол.": Exit Sub
         nr = FindFreeRow(wsT)
         If nr = 0 Then Fail "В листе «Торговля» нет свободных строк (до строки 300).": Exit Sub
@@ -181,6 +182,7 @@ Public Sub WriteTrade()
 
     ' ===== РЕЖИМ: то же Действие — увеличение =====
     If actBuy = posBuy Then
+        If Len(Txt(wsIn.Range("C13").Value2)) > 0 Then Fail "Действие совпадает с направлением позиции (это увеличение). Очистите поле «Закрыть» или выберите противоположное Действие.": Exit Sub
         newQty = posQty + qty
         newRate = R8((posQty * posRate + qty * eff) / newQty)
         wsT.Cells(pr, 3).Value2 = d
@@ -196,17 +198,19 @@ Public Sub WriteTrade()
     End If
 
     ' ===== РЕЖИМ: противоположное Действие — закрытие =====
-    If IsNum(wsIn.Range("C13").Value2) Then
-        closeQ = wsIn.Range("C13").Value2
-    ElseIf Len(Txt(wsIn.Range("C13").Value2)) = 0 Then
+    ' Поле «Закрыть» (C13): Частично (по умолчанию) — списывается проданное Кол-во,
+    ' Полностью — закрывается весь остаток позиции.
+    closeMode = Txt(wsIn.Range("C13").Value2)
+    If Len(closeMode) = 0 Or StrComp(closeMode, "Частично", vbTextCompare) = 0 Then
         closeQ = qty
+        If closeQ > posQty + EPS Then
+            Fail "Кол-во (" & closeQ & ") больше остатка позиции " & id & " (" & posQty & "). Выберите в поле «Закрыть» значение «Полностью»."
+            Exit Sub
+        End If
+    ElseIf StrComp(closeMode, "Полностью", vbTextCompare) = 0 Then
+        closeQ = posQty
     Else
-        Fail "«Кол-во закрыть» должно быть числом.": Exit Sub
-    End If
-    If closeQ <= 0 Then Fail "«Кол-во закрыть» должно быть больше нуля.": Exit Sub
-    If closeQ > posQty + EPS Then
-        Fail "«Кол-во закрыть» (" & closeQ & ") больше остатка позиции " & id & " (" & posQty & ")."
-        Exit Sub
+        Fail "В поле «Закрыть» выберите Частично или Полностью.": Exit Sub
     End If
     cr = FindFreeRow(wsC)
     If cr = 0 Then Fail "В листе «Закрытые» нет свободных строк (до строки 300).": Exit Sub
