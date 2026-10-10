@@ -186,7 +186,6 @@ Private Sub DoWrite(ByVal sec As String)
     ' ===== РЕЖИМ: ID пусто — новая позиция =====
     If Len(id) = 0 Then
         If Len(closeMode) > 0 Then Fail "Поле «Закрыть» нужно только при закрытии: укажите ID позиции или очистите поле.": Exit Sub
-        If Len(proto) = 0 Then Fail "Не выбран Протокол.": Exit Sub
         nr = FindFreeRow(wsT)
         If nr = 0 Then Fail "В листе «" & shName & "» нет свободных строк (до строки 300).": Exit Sub
         If Not IsNum(wsR.Range(cntCell).Value2) Then Fail "Счётчик ID (Справочники!" & cntCell & ") не число.": Exit Sub
@@ -357,7 +356,6 @@ Private Sub DoWritePool()
     ' ===== Добавить без ID — новый пул =====
     If Len(id) = 0 Then
         If StrComp(act, "Добавить", vbTextCompare) <> 0 Then Fail "Для «Частично» и «Закрыть» укажите ID пула.": Exit Sub
-        If Len(proto) = 0 Then Fail "Не выбран Протокол.": Exit Sub
         nr = FindFreeRow(wsP)
         If nr = 0 Then Fail "В листе «Пул» нет свободных строк (до строки 300).": Exit Sub
         If Not IsNum(wsR.Range("G7").Value2) Then Fail "Счётчик ID (Справочники!G7) не число.": Exit Sub
