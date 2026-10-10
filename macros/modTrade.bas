@@ -15,6 +15,9 @@ Private Const SH_P As String = "Пул"
 Private Const FIRST_ROW As Long = 5
 Private Const LAST_ROW As Long = 300
 Private Const EPS As Double = 0.000000001
+Private Const COIN_COL As Long = 9      ' Справочники, колонка I «Монеты»
+Private Const COIN_FIRST As Long = 5
+Private Const COIN_LAST As Long = 304
 
 ' ---------- служебные функции ----------
 Private Function IsNum(ByVal v As Variant) As Boolean
@@ -31,8 +34,8 @@ Private Function Txt(ByVal v As Variant) As String
     End If
 End Function
 
-Private Function R8(ByVal x As Double) As Double
-    R8 = Application.WorksheetFunction.Round(x, 8)
+Private Function Round8(ByVal x As Double) As Double
+    Round8 = Application.WorksheetFunction.Round(x, 8)
 End Function
 
 Private Function NormId(ByVal v As Variant, ByVal prefix As String) As String
@@ -160,7 +163,7 @@ Private Sub DoWrite(ByVal sec As String)
         If Not IsNum(wsIn.Range("E10").Value2) Then Fail "Не указана Сумма.": Exit Sub
         sumV = wsIn.Range("E10").Value2
         If sumV <= 0 Then Fail "Сумма должна быть больше нуля.": Exit Sub
-        eff = R8(sumV / qty)
+        eff = Round8(sumV / qty)
     Else
         If Not IsNum(wsIn.Range("C10").Value2) Then Fail "Не указан Курс.": Exit Sub
         rate = wsIn.Range("C10").Value2
@@ -169,9 +172,9 @@ Private Sub DoWrite(ByVal sec As String)
         fee = wsIn.Range("E17").Value2
         If fee < 0 Or fee >= 100 Then Fail "Комиссия должна быть от 0 до 100 (в процентах).": Exit Sub
         If actBuy Then
-            eff = R8(rate * (1 + fee / 100))
+            eff = Round8(rate * (1 + fee / 100))
         Else
-            eff = R8(rate * (1 - fee / 100))
+            eff = Round8(rate * (1 - fee / 100))
         End If
     End If
     If eff <= 0 Then Fail "Получился нулевой курс. Проверьте Сумму, Кол-во и Комиссию.": Exit Sub
@@ -232,7 +235,7 @@ Private Sub DoWrite(ByVal sec As String)
     If actBuy = posBuy Then
         If Len(closeMode) > 0 Then Fail "Действие совпадает с направлением позиции (это увеличение). Очистите поле «Закрыть» или выберите противоположное Действие.": Exit Sub
         newQty = posQty + qty
-        newRate = R8((posQty * posRate + qty * eff) / newQty)
+        newRate = Round8((posQty * posRate + qty * eff) / newQty)
         wsT.Cells(pr, 3).Value2 = d
         If posBuy Then
             wsT.Cells(pr, 6).Value2 = newQty
@@ -277,7 +280,7 @@ Private Sub DoWrite(ByVal sec As String)
         wsC.Cells(cr, 7).Value2 = eff
     End If
 
-    remQ = R8(posQty - closeQ)
+    remQ = Round8(posQty - closeQ)
     If remQ <= EPS Then
         ' полное закрытие: строка уходит из журнала раздела (формулы остаются)
         wsT.Cells(pr, 2).ClearContents
@@ -387,8 +390,8 @@ Private Sub DoWritePool()
     End If
 
     If StrComp(act, "Добавить", vbTextCompare) = 0 Then
-        wsP.Cells(pr, 6).Value2 = R8(N0(wsP.Cells(pr, 6).Value2) + q1)
-        wsP.Cells(pr, 7).Value2 = R8(N0(wsP.Cells(pr, 7).Value2) + q2)
+        wsP.Cells(pr, 6).Value2 = Round8(NumOr0(wsP.Cells(pr, 6).Value2) + q1)
+        wsP.Cells(pr, 7).Value2 = Round8(NumOr0(wsP.Cells(pr, 7).Value2) + q2)
         If hasMin Then
             wsP.Cells(pr, 13).Value2 = mn
             wsP.Cells(pr, 14).Value2 = mx
@@ -396,8 +399,8 @@ Private Sub DoWritePool()
         resultMsg = "В пул " & id & " добавлено: " & q1 & " + " & q2 & "."
     Else
         If hasMin Then Fail "Min и Max задаются только при «Добавить». Очистите эти поля.": Exit Sub
-        wsP.Cells(pr, 8).Value2 = R8(N0(wsP.Cells(pr, 8).Value2) + q1)
-        wsP.Cells(pr, 9).Value2 = R8(N0(wsP.Cells(pr, 9).Value2) + q2)
+        wsP.Cells(pr, 8).Value2 = Round8(NumOr0(wsP.Cells(pr, 8).Value2) + q1)
+        wsP.Cells(pr, 9).Value2 = Round8(NumOr0(wsP.Cells(pr, 9).Value2) + q2)
         If StrComp(act, "Закрыть", vbTextCompare) = 0 Then
             wsP.Cells(pr, 12).Value2 = "Закрыт"
             resultMsg = "Пул " & id & " закрыт."
@@ -415,15 +418,12 @@ EH:
     MsgBox "Ошибка записи: " & Err.Description, vbCritical, "ЗАПИСАТЬ"
 End Sub
 
-Private Function N0(ByVal v As Variant) As Double
-    If VarType(v) = vbDouble Then N0 = v Else N0 = 0
+Private Function NumOr0(ByVal v As Variant) As Double
+    If VarType(v) = vbDouble Then NumOr0 = v Else NumOr0 = 0
 End Function
 
 
 ' ---------- справочник «Монеты» и список пар в листах ИТОГО ----------
-Private Const COIN_COL As Long = 9      ' Справочники, колонка I «Монеты»
-Private Const COIN_FIRST As Long = 5
-Private Const COIN_LAST As Long = 304
 
 Private Function RegisterCoin(ByVal nm As String) As Boolean
     Dim ws As Worksheet, r As Long, v As String, arr(1 To 400) As String
@@ -486,13 +486,13 @@ End Function
 ' Новые монеты -> «Справочники», новая пара -> листы ИТОГО раздела. Возвращает текст для сообщения.
 Private Function RegisterAll(ByVal sec As String, ByVal pair As String) As String
     Dim wsIn As Worksheet, a As Variant, nm As String, s As String
-    Dim sheetsArr As Variant, sh As Variant, addedPair As Boolean
+    Dim sheetsArr As Variant, sh As Variant, addedPair As Boolean, res As String
     Set wsIn = ThisWorkbook.Worksheets(SH_IN)
     For Each a In Array("C5", "D5")
         nm = UCase(Trim(Txt(wsIn.Range(CStr(a)).Value2)))
         If RegisterCoin(nm) Then s = s & nm & ", "
     Next a
-    If Len(s) > 0 Then RegisterAll = vbCrLf & "Новые монеты добавлены в «Справочники»: " & Left(s, Len(s) - 2) & "."
+    If Len(s) > 0 Then res = vbCrLf & "Новые монеты добавлены в «Справочники»: " & Left(s, Len(s) - 2) & "."
     Select Case sec
         Case "T": sheetsArr = Array("ИТОГО Торговля", "ИТОГО")
         Case "L": sheetsArr = Array("ИТОГО Лэндинг", "ИТОГО")
@@ -501,7 +501,8 @@ Private Function RegisterAll(ByVal sec As String, ByVal pair As String) As Strin
     For Each sh In sheetsArr
         If RegisterPair(CStr(sh), pair) Then addedPair = True
     Next sh
-    If addedPair Then RegisterAll = RegisterAll & vbCrLf & "Пара " & pair & " добавлена в листы ИТОГО."
+    If addedPair Then res = res & vbCrLf & "Пара " & pair & " добавлена в листы ИТОГО."
+    RegisterAll = res
 End Function
 
 ' ---------- кнопка ОЧИСТИТЬ (и очистка после записи) ----------
