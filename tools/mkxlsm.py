@@ -1,9 +1,10 @@
 import openpyxl, zipfile, re, sys
 sys.path.insert(0,'.')
 import vbabuild as v
-SRC="/home/claude/crypto-journal/CryptoJournal. Test m2.xlsx"
+SRC="/home/claude/crypto-journal/archive/CryptoJournal. Test m2 (исходник без макросов).xlsx"
 OUT="/home/claude/crypto-journal/CryptoJournal. Test m2.xlsm"
-TMP="tmp_cn.xlsx"
+import tempfile,os
+TMP=os.path.join(tempfile.gettempdir(),"tmp_cn.xlsx")
 wb=openpyxl.load_workbook(SRC)
 wb.code_name="ThisWorkbook"
 names=[]
@@ -12,7 +13,7 @@ for i,ws in enumerate(wb.worksheets,1):
 inp_idx=wb.sheetnames.index("Ввод")+1
 wb.save(TMP)
 code=open('/home/claude/crypto-journal/macros/modTrade.bas',encoding='utf-8').read()
-vba=v.build_vba_project(names,code)
+vba=v.build_vba_project(names,code,{'Sheet%d'%inp_idx:open('/home/claude/crypto-journal/macros/modInputSheet.bas',encoding='utf-8').read()})
 zin=zipfile.ZipFile(TMP)
 files={n:zin.read(n) for n in zin.namelist()}
 ct=files['[Content_Types].xml'].decode()

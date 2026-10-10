@@ -178,7 +178,8 @@ def build_cfb(root):
     assert len(hdr)==512
     return bytes(hdr)+b''.join(sectors)
 
-def build_vba_project(sheet_codenames,code):
+def build_vba_project(sheet_codenames,code,sheet_code=None):
+    sheet_code=sheet_code or {}
     mods=[('ThisWorkbook','doc')]+[(n,'doc') for n in sheet_codenames]+[('modTrade','std')]
     proj=['ID="{5B6B8A44-5A1D-4C2F-8B7E-1C0F6B3C2A10}"']
     for n,k in mods:
@@ -193,6 +194,6 @@ def build_vba_project(sheet_codenames,code):
     v=E('VBA',1)
     v.kids=[E('_VBA_PROJECT',2,bytes([0xCC,0x61,0xFF,0xFF,0,0,0])),E('dir',2,build_dir(mods))]
     for n,k in mods:
-        v.kids.append(E(n,2,module_stream(n,k,code if n=='modTrade' else '')))
+        v.kids.append(E(n,2,module_stream(n,k,code if n=='modTrade' else sheet_code.get(n,''))))
     root.kids.append(v)
     return build_cfb(root)

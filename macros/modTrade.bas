@@ -140,6 +140,7 @@ Private Sub DoWrite(ByVal sec As String)
     If Not IsNum(d) Then Fail "Не указана Дата (B5).": Exit Sub
     pair = UCase(Txt(wsIn.Range("E5").Value2))
     If Len(pair) = 0 Then Fail "Не заполнены Актив 1 и Актив 2 (Пара).": Exit Sub
+    If UCase(Txt(wsIn.Range("C5").Value2)) = UCase(Txt(wsIn.Range("D5").Value2)) Then Fail "Актив 1 и Актив 2 не должны совпадать.": Exit Sub
     proto = Txt(wsIn.Range("F5").Value2)
     act = Txt(wsIn.Range(cAct).Value2)
     If StrComp(act, "Buy", vbTextCompare) = 0 Then
@@ -297,6 +298,7 @@ Private Sub DoWrite(ByVal sec As String)
     End If
 
 Done:
+    resultMsg = resultMsg & RegisterAll(sec, pair)
     ClearInput
     MsgBox resultMsg, vbInformation, "ЗАПИСАТЬ"
     Exit Sub
@@ -322,6 +324,7 @@ Private Sub DoWritePool()
     If Not IsNum(d) Then Fail "Не указана Дата (B5).": Exit Sub
     pair = UCase(Txt(wsIn.Range("E5").Value2))
     If Len(pair) = 0 Then Fail "Не заполнены Актив 1 и Актив 2 (Пара).": Exit Sub
+    If UCase(Txt(wsIn.Range("C5").Value2)) = UCase(Txt(wsIn.Range("D5").Value2)) Then Fail "Актив 1 и Актив 2 не должны совпадать.": Exit Sub
     proto = Txt(wsIn.Range("F5").Value2)
     act = Txt(wsIn.Range("G8").Value2)
     If StrComp(act, "Добавить", vbTextCompare) <> 0 And StrComp(act, "Частично", vbTextCompare) <> 0 _
@@ -402,6 +405,7 @@ Private Sub DoWritePool()
     End If
 
 Done:
+    resultMsg = resultMsg & RegisterAll("P", pair)
     ClearInput
     MsgBox resultMsg, vbInformation, "ЗАПИСАТЬ"
     Exit Sub
@@ -413,6 +417,130 @@ Private Function N0(ByVal v As Variant) As Double
     If VarType(v) = vbDouble Then N0 = v Else N0 = 0
 End Function
 
+
+' ---------- справочник «Монеты» и список пар в листах ИТОГО ----------
+Private Const COIN_COL As Long = 9      ' Справочники, колонка I «Монеты»
+Private Const COIN_FIRST As Long = 5
+Private Const COIN_LAST As Long = 304
+
+' Подсказка при вводе Актива: вызывается из листа «Ввод» (Worksheet_Change).
+Public Sub CompleteCoin(ByVal c As Range)
+    Dim t As String, v As String, ws As Worksheet, r As Long
+    Dim m(1 To 40) As String, n As Long, i As Long, msg As String, ans As String
+    t = UCase(Trim(Txt(c.Value2)))
+    If Len(t) = 0 Then Exit Sub
+    If InStr(t, "/") > 0 Then
+        MsgBox "В поле Актив вводится один актив без «/». Пара собирается автоматически.", vbExclamation, "Монета"
+        c.ClearContents
+        Exit Sub
+    End If
+    Set ws = ThisWorkbook.Worksheets(SH_R)
+    For r = COIN_FIRST To COIN_LAST
+        v = UCase(Txt(ws.Cells(r, COIN_COL).Value2))
+        If Len(v) > 0 Then
+            If v = t Then c.Value2 = t: Exit Sub
+            If Left(v, Len(t)) = t And n < 40 Then n = n + 1: m(n) = v
+        End If
+    Next r
+    c.Value2 = t
+    If n = 0 Then Exit Sub
+    If n = 1 Then
+        If MsgBox("Подставить " & m(1) & " вместо " & t & "?" & vbCrLf & "Нет — " & t & " будет записан как новая монета.", _
+                  vbYesNo + vbQuestion, "Монета") = vbYes Then c.Value2 = m(1)
+    Else
+        msg = "Монеты, начинающиеся с " & t & ":" & vbCrLf
+        For i = 1 To n
+            msg = msg & i & " — " & m(i) & vbCrLf
+        Next i
+        msg = msg & vbCrLf & "Введите номер. Отмена — оставить " & t & " как новую монету."
+        ans = Trim(InputBox(msg, "Монета"))
+        If Len(ans) > 0 Then
+            If IsNumeric(ans) Then
+                i = CLng(ans)
+                If i >= 1 And i <= n Then c.Value2 = m(i)
+            End If
+        End If
+    End If
+End Sub
+
+Private Function RegisterCoin(ByVal nm As String) As Boolean
+    Dim ws As Worksheet, r As Long, v As String, arr(1 To 400) As String
+    Dim n As Long, i As Long, j As Long, tmp As String
+    nm = UCase(Trim(nm))
+    If Len(nm) = 0 Then Exit Function
+    Set ws = ThisWorkbook.Worksheets(SH_R)
+    For r = COIN_FIRST To COIN_LAST
+        v = UCase(Txt(ws.Cells(r, COIN_COL).Value2))
+        If Len(v) > 0 Then
+            If v = nm Then Exit Function
+            If n < 399 Then n = n + 1: arr(n) = v
+        End If
+    Next r
+    n = n + 1: arr(n) = nm
+    For i = 2 To n
+        tmp = arr(i): j = i - 1
+        Do While j >= 1
+            If StrComp(arr(j), tmp, vbBinaryCompare) <= 0 Then Exit Do
+            arr(j + 1) = arr(j): j = j - 1
+        Loop
+        arr(j + 1) = tmp
+    Next i
+    For i = 1 To n
+        ws.Cells(COIN_FIRST - 1 + i, COIN_COL).Value2 = arr(i)
+    Next i
+    RegisterCoin = True
+End Function
+
+Private Function RegisterPair(ByVal shName As String, ByVal pair As String) As Boolean
+    Dim ws As Worksheet, r As Long, v As String, arr(1 To 296) As String
+    Dim n As Long, i As Long, j As Long, tmp As String
+    pair = UCase(Trim(pair))
+    If Len(pair) = 0 Then Exit Function
+    Set ws = ThisWorkbook.Worksheets(shName)
+    For r = FIRST_ROW To LAST_ROW
+        v = UCase(Txt(ws.Cells(r, 2).Value2))
+        If Len(v) > 0 Then
+            If v = pair Then Exit Function
+            n = n + 1: arr(n) = v
+        End If
+    Next r
+    If n >= 296 Then Exit Function
+    n = n + 1: arr(n) = pair
+    For i = 2 To n
+        tmp = arr(i): j = i - 1
+        Do While j >= 1
+            If StrComp(arr(j), tmp, vbBinaryCompare) <= 0 Then Exit Do
+            arr(j + 1) = arr(j): j = j - 1
+        Loop
+        arr(j + 1) = tmp
+    Next i
+    ws.Range(ws.Cells(FIRST_ROW, 2), ws.Cells(LAST_ROW, 2)).ClearContents
+    For i = 1 To n
+        ws.Cells(FIRST_ROW - 1 + i, 2).Value2 = arr(i)
+    Next i
+    RegisterPair = True
+End Function
+
+' Новые монеты -> «Справочники», новая пара -> листы ИТОГО раздела. Возвращает текст для сообщения.
+Private Function RegisterAll(ByVal sec As String, ByVal pair As String) As String
+    Dim wsIn As Worksheet, a As Variant, nm As String, s As String
+    Dim sheetsArr As Variant, sh As Variant, addedPair As Boolean
+    Set wsIn = ThisWorkbook.Worksheets(SH_IN)
+    For Each a In Array("C5", "D5")
+        nm = UCase(Trim(Txt(wsIn.Range(CStr(a)).Value2)))
+        If RegisterCoin(nm) Then s = s & nm & ", "
+    Next a
+    If Len(s) > 0 Then RegisterAll = vbCrLf & "Новые монеты добавлены в «Справочники»: " & Left(s, Len(s) - 2) & "."
+    Select Case sec
+        Case "T": sheetsArr = Array("ИТОГО Торговля", "ИТОГО")
+        Case "L": sheetsArr = Array("ИТОГО Лэндинг", "ИТОГО")
+        Case Else: sheetsArr = Array("ИТОГО ПУЛ")
+    End Select
+    For Each sh In sheetsArr
+        If RegisterPair(CStr(sh), pair) Then addedPair = True
+    Next sh
+    If addedPair Then RegisterAll = RegisterAll & vbCrLf & "Пара " & pair & " добавлена в листы ИТОГО."
+End Function
 
 ' ---------- кнопка ОЧИСТИТЬ (и очистка после записи) ----------
 ' Очищает окна ввода всех разделов. Дата (B5), Комиссия (E17) и блок «Обратный расчёт» остаются.
