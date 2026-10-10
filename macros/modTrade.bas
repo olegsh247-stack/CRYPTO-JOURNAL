@@ -341,7 +341,6 @@ Private Sub DoWritePool()
     If hasMin Then
         If Not IsNum(v1) Or Not IsNum(v2) Then Fail "Min и Max должны быть числами.": Exit Sub
         mn = v1: mx = v2
-        If mn <= 0 Or mx <= 0 Then Fail "Min и Max должны быть больше нуля.": Exit Sub
         If mn >= mx Then Fail "Min должен быть меньше Max.": Exit Sub
     End If
 
