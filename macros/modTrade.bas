@@ -3,13 +3,15 @@ Option Explicit
 ' Лист «Ввод»: Дата B5, Актив 1 C5, Актив 2 D5, Пара E5, Протокол F5,
 ' Торговля: Действие C8, Кол-во C9, Курс C10, ID позиции C12, Закрыть C13 (Частично/Полностью),
 ' Лэндинг: Действие E8, Кол-во E9, Сумма E10, ID позиции E12, Закрыть E13.
-' Комиссия E17. Счётчики ID: Справочники!G5 (Торговля), G6 (Лэндинг).
+' Пул: Действие G8 (Добавить/Частично/Закрыть), ID пула G9, Кол-во 1 G10, Кол-во 2 G11, Min G12, Max G13.
+' Комиссия E17. Счётчики ID: Справочники!G5 (Торговля), G6 (Лэндинг), G7 (Пул).
 
 Private Const SH_IN As String = "Ввод"
 Private Const SH_T As String = "Торговля"
 Private Const SH_C As String = "Закрытые"
 Private Const SH_R As String = "Справочники"
 Private Const SH_L As String = "Лэндинг"
+Private Const SH_P As String = "Пул"
 Private Const FIRST_ROW As Long = 5
 Private Const LAST_ROW As Long = 300
 Private Const EPS As Double = 0.000000001
@@ -88,11 +90,12 @@ Public Sub WriteEntry()
     nL = AnyFilled(wsIn.Range("E8:E10")) Or AnyFilled(wsIn.Range("E12:E13"))
     nP = AnyFilled(wsIn.Range("G8:G13"))
     If Abs(CInt(nT) + CInt(nL) + CInt(nP)) > 1 Then
-        Fail "Заполнено больше одного раздела. Оставьте только один (Торговля, Лэндинг или Пулы)."
+        Fail "Заполнено больше одного раздела. Оставьте только один (Торговля, Лэндинг или Пул)."
         Exit Sub
     End If
-    If nP Then Fail "Запись для раздела «Пулы» пока не подключена.": Exit Sub
-    If nL Then
+    If nP Then
+        DoWritePool
+    ElseIf nL Then
         DoWrite "L"
     ElseIf nT Then
         DoWrite "T"
@@ -300,6 +303,117 @@ Done:
 EH:
     MsgBox "Ошибка записи: " & Err.Description, vbCritical, "ЗАПИСАТЬ"
 End Sub
+
+' ---------- раздел «Пул» ----------
+Private Sub DoWritePool()
+    Dim wsIn As Worksheet, wsP As Worksheet, wsR As Worksheet
+    Dim d As Variant, pair As String, proto As String, act As String
+    Dim q1 As Double, q2 As Double, mn As Double, mx As Double
+    Dim hasMin As Boolean, hasMax As Boolean
+    Dim id As String, pr As Long, nr As Long, cnt As Long, resultMsg As String
+    Dim v1 As Variant, v2 As Variant
+
+    On Error GoTo EH
+    Set wsIn = ThisWorkbook.Worksheets(SH_IN)
+    Set wsP = ThisWorkbook.Worksheets(SH_P)
+    Set wsR = ThisWorkbook.Worksheets(SH_R)
+
+    d = wsIn.Range("B5").Value2
+    If Not IsNum(d) Then Fail "Не указана Дата (B5).": Exit Sub
+    pair = UCase(Txt(wsIn.Range("E5").Value2))
+    If Len(pair) = 0 Then Fail "Не заполнены Актив 1 и Актив 2 (Пара).": Exit Sub
+    proto = Txt(wsIn.Range("F5").Value2)
+    act = Txt(wsIn.Range("G8").Value2)
+    If StrComp(act, "Добавить", vbTextCompare) <> 0 And StrComp(act, "Частично", vbTextCompare) <> 0 _
+       And StrComp(act, "Закрыть", vbTextCompare) <> 0 Then
+        Fail "Выберите Действие: Добавить, Частично или Закрыть.": Exit Sub
+    End If
+    If Not IsNum(wsIn.Range("G10").Value2) Or Not IsNum(wsIn.Range("G11").Value2) Then
+        Fail "Заполните Кол-во 1 и Кол-во 2.": Exit Sub
+    End If
+    q1 = wsIn.Range("G10").Value2: q2 = wsIn.Range("G11").Value2
+    If q1 <= 0 Or q2 <= 0 Then Fail "Кол-во 1 и Кол-во 2 должны быть больше нуля.": Exit Sub
+
+    ' Min / Max: оба поля или ни одного
+    v1 = wsIn.Range("G12").Value2: v2 = wsIn.Range("G13").Value2
+    hasMin = (Len(Txt(v1)) > 0): hasMax = (Len(Txt(v2)) > 0)
+    If hasMin <> hasMax Then Fail "Min и Max заполняются оба или ни одного.": Exit Sub
+    If hasMin Then
+        If Not IsNum(v1) Or Not IsNum(v2) Then Fail "Min и Max должны быть числами.": Exit Sub
+        mn = v1: mx = v2
+        If mn <= 0 Or mx <= 0 Then Fail "Min и Max должны быть больше нуля.": Exit Sub
+        If mn >= mx Then Fail "Min должен быть меньше Max.": Exit Sub
+    End If
+
+    id = NormId(wsIn.Range("G9").Value2, "P-")
+
+    ' ===== Добавить без ID — новый пул =====
+    If Len(id) = 0 Then
+        If StrComp(act, "Добавить", vbTextCompare) <> 0 Then Fail "Для «Частично» и «Закрыть» укажите ID пула.": Exit Sub
+        If Len(proto) = 0 Then Fail "Не выбран Протокол.": Exit Sub
+        nr = FindFreeRow(wsP)
+        If nr = 0 Then Fail "В листе «Пул» нет свободных строк (до строки 300).": Exit Sub
+        If Not IsNum(wsR.Range("G7").Value2) Then Fail "Счётчик ID (Справочники!G7) не число.": Exit Sub
+        cnt = CLng(wsR.Range("G7").Value2) + 1
+        id = "P-" & Format(cnt, "0000")
+        If FindId(wsP, id) > 0 Then Fail "ID " & id & " уже есть на листе «Пул». Проверьте счётчик в Справочники!G7.": Exit Sub
+        wsP.Cells(nr, 2).Value2 = id
+        wsP.Cells(nr, 3).Value2 = d
+        wsP.Cells(nr, 4).Value2 = proto
+        wsP.Cells(nr, 5).Value2 = pair
+        wsP.Cells(nr, 6).Value2 = q1
+        wsP.Cells(nr, 7).Value2 = q2
+        wsP.Cells(nr, 12).Value2 = "Открыт"
+        If hasMin Then
+            wsP.Cells(nr, 13).Value2 = mn
+            wsP.Cells(nr, 14).Value2 = mx
+        End If
+        wsR.Range("G7").Value2 = cnt
+        resultMsg = "Открыт новый пул " & id & " (" & pair & ", " & q1 & " + " & q2 & ")."
+        GoTo Done
+    End If
+
+    ' ===== ID заполнен: ищем пул =====
+    pr = FindId(wsP, id)
+    If pr = 0 Then Fail "ID " & id & " не найден на листе «Пул».": Exit Sub
+    If Txt(wsP.Cells(pr, 12).Value2) = "Закрыт" Then Fail "Пул " & id & " уже закрыт.": Exit Sub
+    If UCase(Txt(wsP.Cells(pr, 5).Value2)) <> pair Then
+        Fail "Пара на «Вводе» (" & pair & ") не совпадает с парой пула " & id & " (" & Txt(wsP.Cells(pr, 5).Value2) & ")."
+        Exit Sub
+    End If
+
+    If StrComp(act, "Добавить", vbTextCompare) = 0 Then
+        wsP.Cells(pr, 6).Value2 = R8(N0(wsP.Cells(pr, 6).Value2) + q1)
+        wsP.Cells(pr, 7).Value2 = R8(N0(wsP.Cells(pr, 7).Value2) + q2)
+        If hasMin Then
+            wsP.Cells(pr, 13).Value2 = mn
+            wsP.Cells(pr, 14).Value2 = mx
+        End If
+        resultMsg = "В пул " & id & " добавлено: " & q1 & " + " & q2 & "."
+    Else
+        If hasMin Then Fail "Min и Max задаются только при «Добавить». Очистите эти поля.": Exit Sub
+        wsP.Cells(pr, 8).Value2 = R8(N0(wsP.Cells(pr, 8).Value2) + q1)
+        wsP.Cells(pr, 9).Value2 = R8(N0(wsP.Cells(pr, 9).Value2) + q2)
+        If StrComp(act, "Закрыть", vbTextCompare) = 0 Then
+            wsP.Cells(pr, 12).Value2 = "Закрыт"
+            resultMsg = "Пул " & id & " закрыт."
+        Else
+            resultMsg = "Из пула " & id & " выведено: " & q1 & " + " & q2 & " (пул остаётся открытым)."
+        End If
+    End If
+
+Done:
+    ClearInput
+    MsgBox resultMsg, vbInformation, "ЗАПИСАТЬ"
+    Exit Sub
+EH:
+    MsgBox "Ошибка записи: " & Err.Description, vbCritical, "ЗАПИСАТЬ"
+End Sub
+
+Private Function N0(ByVal v As Variant) As Double
+    If VarType(v) = vbDouble Then N0 = v Else N0 = 0
+End Function
+
 
 ' ---------- кнопка ОЧИСТИТЬ (и очистка после записи) ----------
 ' Очищает окна ввода всех разделов. Дата (B5), Комиссия (E17) и блок «Обратный расчёт» остаются.
