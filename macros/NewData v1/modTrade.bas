@@ -3,6 +3,7 @@ Option Explicit
 ' Изменения относительно CryptoJournal: (1) ID числовой — вручную можно вводить T-456, L-456, P-456 или просто 456,
 ' ID хранится как Буква-0456, повторы невозможны; (2) новые пары сами попадают в листы ИТОГО при любой записи
 ' и при ручном вводе в журналы и в «Историю» (событие книги Workbook_SheetChange -> PairsOnChange).
+' Монеты новой пары также добавляются в лист «БАЛАНС» (колонка B) и в справочник «Монеты».
 ' Лист «Ввод»: Дата B5, Актив 1 C5, Актив 2 D5, Пара E5, Протокол F5,
 ' Торговля: Действие C8, Кол-во C9, Курс C10, ID позиции C12, Закрыть C13 (Частично/Полностью),
 ' Лэндинг: Действие E8, Кол-во E9, Сумма E10, ID позиции E12, Закрыть E13.
@@ -16,6 +17,7 @@ Private Const SH_R As String = "Справочники"
 Private Const SH_L As String = "Лэндинг"
 Private Const SH_P As String = "Пул"
 Private Const SH_H As String = "История"
+Private Const SH_B As String = "БАЛАНС"
 Private Const FIRST_ROW As Long = 5
 Private Const LAST_ROW As Long = 300
 Private Const EPS As Double = 0.000000001
@@ -564,6 +566,23 @@ Private Function RegisterPair(ByVal shName As String, ByVal pair As String) As B
     RegisterPair = True
 End Function
 
+' Монеты пары «X/Y» -> список монет листа «БАЛАНС» и справочник «Монеты»
+Private Sub RegisterCoinsOfPair(ByVal pair As String)
+    Dim p As Long, a As String, b As String
+    p = InStr(pair, "/")
+    If p < 2 Then Exit Sub
+    a = Trim(Left(pair, p - 1))
+    b = Trim(Mid(pair, p + 1))
+    If Len(a) > 0 Then
+        RegisterPair SH_B, a
+        RegisterCoin a
+    End If
+    If Len(b) > 0 Then
+        RegisterPair SH_B, b
+        RegisterCoin b
+    End If
+End Sub
+
 ' ---------- автодобавление пары при любом появлении ----------
 ' Вызывается из ThisWorkbook.Workbook_SheetChange. Тихо добавляет новую пару в листы ИТОГО:
 ' «История» (колонка B) -> ИТОГО; «Торговля» (E) -> ИТОГО Торговля и ИТОГО; «Лэндинг» (E) -> ИТОГО Лэндинг и ИТОГО;
@@ -600,6 +619,7 @@ Public Sub PairsOnChange(ByVal Sh As Object, ByVal Target As Range)
             For Each d In dest
                 RegisterPair CStr(d), pair
             Next d
+            RegisterCoinsOfPair pair
         End If
     Next c
 Fin:
@@ -624,6 +644,7 @@ Private Function RegisterAll(ByVal sec As String, ByVal pair As String) As Strin
     For Each sh In sheetsArr
         If RegisterPair(CStr(sh), pair) Then addedPair = True
     Next sh
+    RegisterCoinsOfPair pair
     If addedPair Then res = res & vbCrLf & "Пара " & pair & " добавлена в листы ИТОГО."
     RegisterAll = res
 End Function
