@@ -302,7 +302,7 @@ Private Sub DoWrite(ByVal sec As String)
 
 Done:
     resultMsg = resultMsg & RegisterAll(sec, pair)
-    ClearInput
+    ClearSections
     MsgBox resultMsg, vbInformation, "ЗАПИСАТЬ"
     Exit Sub
 EH:
@@ -409,7 +409,7 @@ Private Sub DoWritePool()
 
 Done:
     resultMsg = resultMsg & RegisterAll("P", pair)
-    ClearInput
+    ClearSections
     MsgBox resultMsg, vbInformation, "ЗАПИСАТЬ"
     Exit Sub
 EH:
@@ -503,14 +503,24 @@ Private Function RegisterAll(ByVal sec As String, ByVal pair As String) As Strin
     RegisterAll = res
 End Function
 
-' ---------- кнопка ОЧИСТИТЬ (и очистка после записи) ----------
-' Очищает окна ввода всех разделов. Дата (B5), Комиссия (E17) и блок «Обратный расчёт» остаются.
-Public Sub ClearInput()
+' ---------- очистка после записи и кнопка ОЧИСТИТЬ ----------
+' После записи: очищаются только окна разделов. Дата, Актив 1/2, Протокол, Комиссия и «Обратный расчёт» остаются.
+Private Sub ClearSections()
     Dim ws As Worksheet, a As Variant
     Set ws = ThisWorkbook.Worksheets(SH_IN)
-    For Each a In Array("C5", "D5", "F5", "C8", "C9", "C10", "C12", "C13", _
+    For Each a In Array("C8", "C9", "C10", "C12", "C13", _
                         "E8", "E9", "E10", "E12", "E13", _
                         "G8", "G9", "G10", "G11", "G12", "G13")
+        ws.Range(CStr(a)).ClearContents
+    Next a
+End Sub
+
+' Кнопка ОЧИСТИТЬ: разделы + Актив 1, Актив 2, Протокол. Дата (B5), Комиссия (E17) и калькулятор остаются.
+Public Sub ClearInput()
+    Dim ws As Worksheet, a As Variant
+    ClearSections
+    Set ws = ThisWorkbook.Worksheets(SH_IN)
+    For Each a In Array("C5", "D5", "F5")
         ws.Range(CStr(a)).ClearContents
     Next a
 End Sub

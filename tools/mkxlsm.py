@@ -2,7 +2,7 @@ import openpyxl, zipfile, re, sys
 sys.path.insert(0,'.')
 import vbabuild as v
 SRC="/home/claude/crypto-journal/archive/CryptoJournal. Test m2 (исходник без макросов).xlsx"
-OUT="/home/claude/crypto-journal/CryptoJournal. Test m2.xlsm"
+OUT="/home/claude/crypto-journal/CryptoJournal.xlsm"
 import tempfile,os
 TMP=os.path.join(tempfile.gettempdir(),"tmp_cn.xlsx")
 wb=openpyxl.load_workbook(SRC)
